@@ -1,0 +1,117 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+)
+
+type RequestPayload struct {
+	Action string      `json:"action"`
+	Auth   AuthPayload `json:"auth,omitempty"`
+}
+type AuthPayload struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func (app *Config) Broker(w http.ResponseWriter, r *http.Request) {
+	payload := jsonResponse{
+		Error:   false,
+		Message: "Hit the broker",
+	}
+	_ = app.writeJSON(w, http.StatusOK, payload)
+}
+
+func (app *Config) HandleSubmission(w http.ResponseWriter, r *http.Request) {
+	var requestPayload RequestPayload
+	err := app.readJSON(w, r, &requestPayload)
+	if err != nil {
+		err := app.errorJSON(w, err)
+		if err != nil {
+			return
+		}
+	}
+	switch requestPayload.Action {
+	case "auth":
+		app.authenticate(w, requestPayload.Auth)
+	default:
+		err := app.errorJSON(w, fmt.Errorf("invalid action"))
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (app *Config) authenticate(w http.ResponseWriter, a AuthPayload) {
+	jsonData, err := json.MarshalIndent(a, "", "\t")
+	if err != nil {
+		err := app.errorJSON(w, err)
+		if err != nil {
+			return
+		}
+	}
+	request, err := http.NewRequest("POST", "http://authentication-service/authenticate", bytes.NewBuffer(jsonData))
+	if err != nil {
+		err = app.errorJSON(w, err)
+		return
+	}
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		err = app.errorJSON(w, err)
+		return
+	}
+
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			return
+		}
+	}(response.Body)
+
+	fmt.Println(response.Body, response.StatusCode)
+
+	if response.StatusCode == http.StatusUnauthorized {
+		err := app.errorJSON(w, fmt.Errorf("authentication failed"))
+		if err != nil {
+			return
+		}
+	} else if response.StatusCode != http.StatusOK {
+		err := app.errorJSON(w, fmt.Errorf("authentication failed"))
+		if err != nil {
+			return
+		}
+	}
+
+	var jsonFromService jsonResponse
+
+	err = json.NewDecoder(response.Body).Decode(&jsonFromService)
+	if err != nil {
+		err = app.errorJSON(w, err)
+		if err != nil {
+			return
+		}
+		return
+	}
+
+	if jsonFromService.Error {
+		err := app.errorJSON(w, err, http.StatusUnauthorized)
+		if err != nil {
+			return
+		}
+	}
+	var payload jsonResponse
+
+	payload.Error = false
+	payload.Message = "Authenticated!"
+	payload.Data = jsonFromService.Data
+
+	err = app.writeJSON(w, http.StatusOK, payload)
+	if err != nil {
+		return
+	}
+
+}
