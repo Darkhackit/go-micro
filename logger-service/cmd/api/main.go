@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/Darkhackit/go-micro-logger/data"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -36,6 +37,7 @@ func main() {
 			panic(err)
 		}
 	}()
+	client = mongoClient
 
 	app := Config{
 		Models: data.New(client),
@@ -70,5 +72,6 @@ func connectToMongo() (*mongo.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("Connected to mongo")
 	return c, nil
 }

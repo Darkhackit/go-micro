@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/Darkhackit/go-micro-logger/data"
 	"net/http"
 )
@@ -12,6 +13,7 @@ type JSONPayload struct {
 
 func (app *Config) WriteLog(w http.ResponseWriter, r *http.Request) {
 	var request JSONPayload
+
 	err := app.readJSON(w, r, &request)
 	if err != nil {
 		err := app.errorJSON(w, err)
@@ -19,13 +21,15 @@ func (app *Config) WriteLog(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
 	event := data.LogEntry{
 		Name: request.Name,
 		Data: request.Data,
 	}
-
+	fmt.Println("Go here")
 	err = app.Models.LogEntry.Insert(event)
 	if err != nil {
+		fmt.Println(err)
 		err := app.errorJSON(w, err)
 		if err != nil {
 			return

@@ -11,10 +11,15 @@ import (
 type RequestPayload struct {
 	Action string      `json:"action"`
 	Auth   AuthPayload `json:"auth,omitempty"`
+	Log    LogPayload  `json:"log,omitempty"`
 }
 type AuthPayload struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+type LogPayload struct {
+	Name string `json:"name"`
+	Date string `json:"date"`
 }
 
 func (app *Config) Broker(w http.ResponseWriter, r *http.Request) {
@@ -37,11 +42,61 @@ func (app *Config) HandleSubmission(w http.ResponseWriter, r *http.Request) {
 	switch requestPayload.Action {
 	case "auth":
 		app.authenticate(w, requestPayload.Auth)
+	case "log":
+		app.LogItem(w, requestPayload.Log)
 	default:
 		err := app.errorJSON(w, fmt.Errorf("invalid action"))
 		if err != nil {
 			return
 		}
+	}
+}
+
+func (app *Config) LogItem(w http.ResponseWriter, entry LogPayload) {
+	jsonData, err := json.Marshal(entry)
+	if err != nil {
+		err := app.errorJSON(w, err)
+		if err != nil {
+			return
+		}
+	}
+	logServiceUrl := "http://logger-service/log"
+	req, err := http.NewRequest("POST", logServiceUrl, bytes.NewBuffer(jsonData))
+	if err != nil {
+		err := app.errorJSON(w, err)
+		if err != nil {
+			return
+		}
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+	response, err := client.Do(req)
+	if err != nil {
+		err := app.errorJSON(w, err)
+		if err != nil {
+			return
+		}
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			return
+		}
+	}(response.Body)
+
+	if response.StatusCode != http.StatusCreated {
+		err := app.errorJSON(w, fmt.Errorf("invalid status code: %d", response.StatusCode))
+		if err != nil {
+			return
+		}
+	}
+	var payload jsonResponse
+	payload.Error = false
+	payload.Message = "Log item successfully created"
+
+	err = app.writeJSON(w, response.StatusCode, payload)
+	if err != nil {
+		return
 	}
 }
 

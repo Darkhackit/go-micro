@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"fmt"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -32,6 +33,7 @@ type LogEntry struct {
 }
 
 func (l *LogEntry) Insert(entry LogEntry) error {
+	fmt.Println(entry)
 	collection := client.Database("logs").Collection("logs")
 	_, err := collection.InsertOne(context.TODO(), LogEntry{
 		Name:      entry.Name,
