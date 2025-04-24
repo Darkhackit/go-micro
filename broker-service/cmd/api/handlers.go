@@ -12,6 +12,7 @@ type RequestPayload struct {
 	Action string      `json:"action"`
 	Auth   AuthPayload `json:"auth,omitempty"`
 	Log    LogPayload  `json:"log,omitempty"`
+	Mail   MailPayload `json:"mail,omitempty"`
 }
 type AuthPayload struct {
 	Email    string `json:"email"`
@@ -20,6 +21,12 @@ type AuthPayload struct {
 type LogPayload struct {
 	Name string `json:"name"`
 	Date string `json:"date"`
+}
+type MailPayload struct {
+	From    string `json:"from"`
+	To      string `json:"to"`
+	Subject string `json:"subject"`
+	Message string `json:"message"`
 }
 
 func (app *Config) Broker(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +51,8 @@ func (app *Config) HandleSubmission(w http.ResponseWriter, r *http.Request) {
 		app.authenticate(w, requestPayload.Auth)
 	case "log":
 		app.LogItem(w, requestPayload.Log)
+	case "mail":
+		app.sendMail(w, requestPayload.Mail)
 	default:
 		err := app.errorJSON(w, fmt.Errorf("invalid action"))
 		if err != nil {
@@ -163,6 +172,59 @@ func (app *Config) authenticate(w http.ResponseWriter, a AuthPayload) {
 	payload.Error = false
 	payload.Message = "Authenticated!"
 	payload.Data = jsonFromService.Data
+
+	err = app.writeJSON(w, http.StatusOK, payload)
+	if err != nil {
+		return
+	}
+
+}
+
+func (app *Config) sendMail(w http.ResponseWriter, mail MailPayload) {
+	jsonData, err := json.MarshalIndent(mail, "", "\t")
+	if err != nil {
+		err := app.errorJSON(w, err)
+		if err != nil {
+			return
+		}
+	}
+	mailServiceUrl := "http://mail-service/send"
+	req, err := http.NewRequest("POST", mailServiceUrl, bytes.NewBuffer(jsonData))
+	if err != nil {
+		err := app.errorJSON(w, err)
+		if err != nil {
+			return
+		}
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+	response, err := client.Do(req)
+	if err != nil {
+		err := app.errorJSON(w, err)
+		if err != nil {
+			return
+		}
+		return
+	}
+	fmt.Println(response.Body)
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			return
+		}
+	}(response.Body)
+
+	if response.StatusCode != http.StatusOK {
+		err := app.errorJSON(w, fmt.Errorf("invalid status code: %d", response.StatusCode))
+		if err != nil {
+			return
+		}
+		return
+	}
+	var payload jsonResponse
+	payload.Error = false
+	payload.Message = "Mail successfully sent"
 
 	err = app.writeJSON(w, http.StatusOK, payload)
 	if err != nil {
